@@ -1,0 +1,74 @@
+version: "3.3"
+
+services:
+  cache:
+    image: redis:latest
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PWD}
+    networks:
+      - internal
+
+  mainDB:
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    restart: always
+    volumes:
+      - ./ms_user_data:/var/opt/mssql/data
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "@abc12345"
+    networks:
+      - internal
+      - default
+
+  api:
+    build:
+      context: ..
+    image: server
+    env_file: docker-compose.env
+    environment:
+      SERVICES: api
+      PORT: 3000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api-gw.rule=PathPrefix(`/`)"
+      - "traefik.http.services.api-gw.loadbalancer.server.port=3000"
+    volumes:
+      -
+    networks:
+      - internal
+
+  user:
+    build:
+      context: ..
+    image: server
+    env_file: docker-compose.env
+    environment:
+      SERVICES: user
+    networks:
+      - internal
+
+  traefik:
+    image: traefik:v2.1
+    command:
+      - "--api.insecure=true" # Don't do that in production!
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+    ports:
+      - 3000:80
+      - 3001:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal
+      - default
+
+networks:
+  internal:
+
+volumes:
+  logs:
+  data:

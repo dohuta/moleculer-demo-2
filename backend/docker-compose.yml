@@ -1,0 +1,60 @@
+version: "3"
+
+services:
+  cache:
+    image: redis:latest
+    container_name: todos_cache
+    restart: always
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PWD}
+    networks:
+      - todos-backend
+
+  user-db:
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    container_name: todos_userDB
+    restart: always
+    volumes:
+      - ./ms_user_data:/var/opt/mssql/data
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "!abc12345" # super admin password - will not be used as database login
+    networks:
+      - todos-backend
+
+  note-db:
+    image: mongo:4.2.3-bionic
+    container_name: todos_noteDB
+    ports:
+      - 27017:${SERVICE_NOTE_DB_PORT}
+    environment:
+      - MONGO_INITDB_DATABASE=${SERVICE_NOTE_DB_NAME}
+      - MONGO_INITDB_ROOT_USERNAME=${SERVICE_NOTE_DB_USRNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${SERVICE_NOTE_DB_PWD}
+    volumes:
+      - ./MongoDBNote:/docker-entrypoint-initdb.d
+      - ./ms_note_data:/data
+    networks:
+      - todos-backend
+
+  mongoclient:
+    image: mongoclient/mongoclient
+    container_name: todos_mongoClient
+    volumes:
+      - ./ms_note_client:/data/db mongoclient/mongoclient
+    environment:
+      - MONGO_URL=mongodb://${SERVICE_NOTE_DB_USRNAME}:${SERVICE_NOTE_DB_PWD}@note-db:${SERVICE_NOTE_DB_PORT}
+    ports:
+      - 3003:3000
+    networks:
+      - todos-backend
+    depends_on:
+      - note-db
+
+networks:
+  todos-backend:
+      driver: bridge
+

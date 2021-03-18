@@ -1,0 +1,62 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "My Moleculer-based microservices project",
+  "scripts": {
+    "dev": "env-cmd -f ../configs/dev.env moleculer-runner --repl --hot src/services/**/*.service.js",
+    "start": "moleculer-runner",
+    "cli": "moleculer connect ",
+    "ci": "jest --watch",
+    "test": "jest --coverage",
+    "lint": "eslint services",
+    "dc:up": "docker-compose up --build -d",
+    "dc:logs": "docker-compose logs -f",
+    "dc:down": "docker-compose down"
+  },
+  "keywords": [
+    "microservices",
+    "moleculer"
+  ],
+  "author": "",
+  "devDependencies": {
+    "@types/jest": "^26.0.21",
+    "env-cmd": "^10.1.0",
+    "eslint": "^7.7.0",
+    "jest": "^26.4.2",
+    "jest-cli": "^26.4.2",
+    "moleculer-repl": "^0.6.4",
+    "sequelize-auto": "^0.8.1"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "flat": "^5.0.2",
+    "helmet": "^4.4.1",
+    "ioredis": "^4.23.1",
+    "jsonwebtoken": "^8.5.1",
+    "lodash": "^4.17.21",
+    "moleculer": "^0.14.10",
+    "moleculer-web": "^0.9.0",
+    "mongoose": "^5.12.0",
+    "ms": "^2.1.3",
+    "sequelize": "^6.5.0",
+    "tedious": "^11.0.5"
+  },
+  "engines": {
+    "node": ">= 10.x.x"
+  },
+  "jest": {
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node",
+    "rootDir": "./src",
+    "roots": [
+      "../test"
+    ],
+    "setupFiles": [
+      "../test/jest.config.js"
+    ],
+    "coverageReporters": [
+      "clover",
+      "cobertura"
+    ]
+  }
+}
