@@ -27,7 +27,7 @@ const verifyDBOptions = (options) => {
 	if (!options.password) throw new Error(DB_ERRORS.MISSING_DB_USRPWD);
 };
 
-const generateModels = async (options) => {
+async function generateModels(options, logger) {
 	return new Promise((resolve, reject) => {
 		try {
 			verifyDBOptions(options);
@@ -57,32 +57,28 @@ const generateModels = async (options) => {
 				// console.log(data.hasTriggerTables); // tables that have triggers
 				// console.log(data.relations); // relationships between models
 				// console.log(data.text); // text of generated models
-				console.info(
-					`Service USER :: Models generated ${JSON.stringify(
-						data.text
-					)}`
+				logger.info(
+					`DBContext :: Model auto-generated -> ${data.text}`
 				);
 				resolve(data);
 			});
 		} catch (error) {
-			console.error(
-				`Service USER :: Error on auto-generating models :: ${error}`
-			);
 			reject(error);
 		}
 	});
-};
+}
 
 class DatabaseContext {
-	constructor() {
+	constructor(logger) {
+		this.logger = logger;
 		try {
 			verifyDBOptions(userDBOptions);
 			this.adapter = new Sequelize(userDBOptions);
 			this.models = require("./models/init-models")(this.adapter);
-			console.log(`Service USER :: DBContext initialized`);
+			this.logger.info(`🚀 DBContext :: initialized`);
 		} catch (error) {
-			console.error(
-				`Service USER :: Error on context intializing :: ${error}`
+			this.logger.error(
+				`DBContext :: Error on context intializing :: ${error}`
 			);
 		}
 	}

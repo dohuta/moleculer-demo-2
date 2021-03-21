@@ -71,7 +71,7 @@ CREATE TABLE [dbo].[User]
 (
     [id] INT NOT NULL PRIMARY KEY IDENTITY(1,1),
     -- Primary Key column
-    [username] NVARCHAR(255) NOT NULL,
+    [username] NVARCHAR(255) NOT NULL UNIQUE,
     [password] NVARCHAR(255) NOT NULL,
     [fullname] NVARCHAR(255),
     [deleted] BIT DEFAULT 0,
@@ -156,3 +156,7 @@ GO
 -- example to execute the stored procedure we just created
 -- EXECUTE dbo.sp_deleteOneUser 1
 -- GO
+
+
+-- Select rows from a Table or View '[User]' in schema '[dbo]'
+SELECT * FROM [dbo].[User]

@@ -9,7 +9,8 @@ module.exports = function(sequelize, DataTypes) {
     },
     username: {
       type: DataTypes.STRING(255),
-      allowNull: false
+      allowNull: false,
+      unique: "UQ__User__F3DBC5729464778D"
     },
     password: {
       type: DataTypes.STRING(255),
@@ -41,10 +42,17 @@ module.exports = function(sequelize, DataTypes) {
     timestamps: false,
     indexes: [
       {
-        name: "PK__User__3213E83F1D342935",
+        name: "PK__User__3213E83FA3DE3E9B",
         unique: true,
         fields: [
           { name: "id" },
+        ]
+      },
+      {
+        name: "UQ__User__F3DBC5729464778D",
+        unique: true,
+        fields: [
+          { name: "username" },
         ]
       },
     ]

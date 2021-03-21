@@ -2,7 +2,7 @@ const Redis = require("ioredis");
 const ms = require("ms");
 
 class CacheBase {
-	constructor(databaseName) {
+	constructor(databaseName, logger) {
 		const db = new Redis(
 			`redis://:${process.env.REDIS_PWD}@${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
 			{
@@ -13,7 +13,8 @@ class CacheBase {
 
 		this.databaseName = databaseName || 0;
 		this.cache = db;
-		console.info(`Cache db ${this.databaseName} is initialized`);
+		this.logger = logger || console;
+		this.logger.info(`🚀 Cache db ${this.databaseName} is initialized`);
 	}
 
 	/**
@@ -22,7 +23,9 @@ class CacheBase {
 	 */
 	async get(key) {
 		const rawData = await this.cache.get(key);
-		console.info(`Cache::${this.databaseName} get ${key} value ${rawData}`);
+		this.logger.info(
+			`Cache :: ${this.databaseName} get ${key} value ${rawData}`
+		);
 		return JSON.parse(rawData);
 	}
 
@@ -38,8 +41,8 @@ class CacheBase {
 			temp[key] = JSON.parse(value);
 			return temp;
 		});
-		console.info(
-			`Cache::${this.databaseName} getMany ${prefix} value ${rawData}`
+		this.logger.info(
+			`Cache :: ${this.databaseName} getMany ${prefix} value ${rawData}`
 		);
 		return data;
 	}
@@ -50,7 +53,7 @@ class CacheBase {
 	 */
 	async getKeys(prefix = undefined) {
 		const keys = await this.cache.keys(`${prefix ? prefix : ""}*`);
-		console.info(`Cache::${this.databaseName} getKeys ${keys}`);
+		this.logger.info(`Cache :: ${this.databaseName} getKeys ${keys}`);
 		return keys;
 	}
 
@@ -61,8 +64,10 @@ class CacheBase {
 	 */
 	async set(key, value) {
 		const ok = await this.cache.set(key, JSON.stringify(value));
-		console.info(
-			`Cache::${this.databaseName} set ${key} value ${rawData} ok ${ok}`
+		this.logger.info(
+			`Cache :: ${this.databaseName} set ${key} value ${JSON.stringify(
+				value
+			)} ok ${ok}`
 		);
 		return ok === "OK";
 	}
@@ -80,8 +85,10 @@ class CacheBase {
 			"EX",
 			ms(expiresIn) / 1000 // convert to second
 		);
-		console.info(
-			`Cache::${this.databaseName} set ${key} value ${value} expires in ${expiresIn} ok ${ok}`
+		this.logger.info(
+			`Cache :: ${this.databaseName} set ${key} value ${JSON.stringify(
+				value
+			)} expires in ${expiresIn} ok ${ok}`
 		);
 		return ok === "OK";
 	}
@@ -92,8 +99,8 @@ class CacheBase {
 	 */
 	async del(key) {
 		const deleted = await this.cache.del(key);
-		console.info(
-			`Cache::${this.databaseName} delete ${key} deleted ${deleted}`
+		this.logger.info(
+			`Cache :: ${this.databaseName} delete ${key} deleted ${deleted}`
 		);
 		return deleted !== 0;
 	}
@@ -104,8 +111,8 @@ class CacheBase {
 	 */
 	async delMany(keys) {
 		const deleted = await this.cache.del(keys);
-		console.info(
-			`Cache::${this.databaseName} delete ${keys} deleted ${deleted}`
+		this.logger.info(
+			`Cache :: ${this.databaseName} delete ${keys} deleted ${deleted}`
 		);
 		return deleted !== 0;
 	}
@@ -115,7 +122,7 @@ class CacheBase {
 	 */
 	async flush() {
 		const ok = await this.cache.flushdb();
-		console.info(`Cache::${this.databaseName} flush database ${ok}`);
+		this.logger.info(`Cache :: ${this.databaseName} flush database ${ok}`);
 		return ok === "OK";
 	}
 }

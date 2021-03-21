@@ -42,7 +42,7 @@ services:
 
   mongoclient:
     image: mongoclient/mongoclient
-    container_name: todos_mongoClient
+    container_name: demo_todos_mongoClient
     volumes:
       - ./ms_note_client:/data/db mongoclient/mongoclient
     environment:
@@ -56,5 +56,4 @@ services:
 
 networks:
   todos-backend:
-      driver: bridge
-
+    driver: bridge

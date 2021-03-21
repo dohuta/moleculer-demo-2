@@ -9,25 +9,24 @@ const {
 	INPUT_ERRORS,
 	CRUD_USER_ERRORS,
 } = require("../../common/constants");
-const authHandler = require("../../handlers/auth-handler");
+const AuthenticationHandler = require("../../handlers/auth-handler");
 const {
 	userDBOptions,
 	generateModels,
 	DatabaseContext,
 } = require("./dbContext");
 
-let dbContext = new DatabaseContext();
-
-// these comment will help give us tons of intellisense suggestion
+// these comment will give us tons of intellisense suggestion
 /**
  * @typedef {import('moleculer').Context} Context Moleculer's Context
- * @typedef {import('http').IncomingMessage} IncomingRequest Incoming HTTP Request
+ * @typedef {import('http').IncomingMessage} IncomingMessage Incoming HTTP Request
+ * @typedef {import('http').ClientRequest} ClientRequest HTTP Server Response
  * @typedef {import('http').ServerResponse} ServerResponse HTTP Server Response
  */
 
 // service declaration/definition
 module.exports = {
-	name: "user", // service name
+	name: process.env.SERVICE_USER_NAME, // service name
 	version: process.env.SERVICE_USER_VERSION, // versioning
 	metadata: {
 		scalable: true,
@@ -51,11 +50,20 @@ module.exports = {
 				password: { type: "string", min: 6, max: 255 },
 			},
 			// handler of this action
-			async handler({ action, params, meta, ...ctx }) {
+			/**
+			 * Authorize the user from request
+			 *
+			 * @param {Context} ctx
+			 * @param {Object} params
+			 * @param {Object} meta
+			 * @returns
+			 */
+			async handler({ params, meta, ...ctx }) {
 				const { username, password } = params; // destructuring params object
+				const { ip, userAgent } = meta;
 
 				// get all user by filters
-				let user = await dbContext.models.User.findAll({
+				let user = await this.dbContext.models.User.findAll({
 					where: {
 						username: username,
 					},
@@ -74,7 +82,7 @@ module.exports = {
 				}
 
 				// password validation
-				const valid = authHandler.verifyPassword(
+				const valid = this.authHandler.verifyPassword(
 					password,
 					user.password
 				);
@@ -92,9 +100,15 @@ module.exports = {
 				// hide some properies before responding
 				const refinedUser = this.refinedUserObject(user.get());
 				// generate token
-				const token = await authHandler.generateToken(refinedUser);
+				const {
+					accessToken,
+					refreshToken,
+				} = await this.authHandler.generateToken(refinedUser, {
+					ip,
+					userAgent,
+				});
 				// compose payload before responding
-				return { ...refinedUser, accessToken: token };
+				return { ...refinedUser, accessToken, refreshToken };
 			},
 		},
 		signout: {
@@ -102,8 +116,16 @@ module.exports = {
 				method: "POST",
 				fullPath: "/signout",
 			},
-			async handler({ action, params, meta, ...ctx }) {
-				return authHandler.deleteAuthInfo(meta.accessToken);
+			/**
+			 * Authorize the user from request
+			 *
+			 * @param {Context} ctx
+			 * @param {Object} params
+			 * @param {Object} meta
+			 * @returns
+			 */
+			async handler({ params, meta, ...ctx }) {
+				return this.authHandler.deleteAuthInfo(meta.accessToken);
 			},
 		},
 		signup: {
@@ -116,10 +138,19 @@ module.exports = {
 				password: { type: "string", min: 6, max: 255 },
 				confirmPassword: { type: "string", min: 6, max: 255 },
 			},
-			async handler({ action, params, meta, ...ctx }) {
+			/**
+			 * Authorize the user from request
+			 *
+			 * @param {Context} ctx
+			 * @param {Object} params
+			 * @param {Object} meta
+			 * @returns
+			 */
+			async handler({ params, meta, ...ctx }) {
 				const { username, password, confirmPassword } = params;
+				const { ip, userAgent } = meta;
 
-				let user = await dbContext.models.User.findAll({
+				let user = await this.dbContext.models.User.findAll({
 					where: {
 						username,
 					},
@@ -138,15 +169,18 @@ module.exports = {
 				if (confirmPassword === password) {
 					// NOTE: CASE 2.1: username is available and password is valid
 					// create user
-					const created = await dbContext.models.User.create({
+					const created = await this.dbContext.models.User.create({
 						username: username,
-						password: authHandler.hashPassword(password),
+						password: this.authHandler.hashPassword(password),
 					});
 
 					// hide sensitive information
 					const refined = this.refinedUserObject(created);
 					// generate access token
-					const accessToken = authHandler.generateToken(refined);
+					const accessToken = this.authHandler.generateToken(
+						refined,
+						{ ip, userAgent }
+					);
 					// compose payload and response to client
 					return { ...refined, accessToken };
 				} else {
@@ -164,30 +198,53 @@ module.exports = {
 		},
 		// this action will not publish under any enpoind, only internal usage and stays behind the gateway
 		verify: {
-			rest: {
-				method: "POST",
-				fullPath: "/verify",
-			},
+			// rest: {
+			// 	method: "POST",
+			// 	fullPath: "/verify",
+			// },
 			params: {
-				token: { type: "string" },
+				accessToken: { type: "string" },
+				rfToken: { type: "string" },
 			},
-			async handler({ action, params, meta, ...ctx }) {
-				const { accessToken, user } = authHandler.validateRequest(
-					undefined,
-					params.token,
-					true
+			/**
+			 * Authorize the user from request
+			 *
+			 * @param {Context} ctx
+			 * @param {Object} params
+			 * @param {Object} meta
+			 * @returns
+			 */
+			async handler({ params, meta, ...ctx }) {
+				const { ip, userAgent } = meta;
+
+				// NOTE: extract sensitive info from token
+				const authPayload = await this.authHandler.verifyAuth(
+					ctx.options.parentCtx.params.req
 				);
 
-				if (user) {
-					const verifiedUser = await dbContext.models.User.findByPk(
-						user.id
-					);
-					if (verifiedUser && user.id === verifiedUser.id) {
-						return { user, accessToken };
-					}
-				}
+				return authPayload;
+			},
+		},
+		refresh: {
+			rest: {
+				method: "POST",
+				fullPath: "/refresh",
+			},
+			/**
+			 * Authorize the user from request
+			 *
+			 * @param {Context} ctx
+			 * @param {Object} params
+			 * @param {Object} meta
+			 * @returns
+			 */
+			async handler({ params, meta, ...ctx }) {
+				const newAuthPayload = this.authHandler.refreshAuth(
+					ctx.options.parentCtx.params.req,
+					{ ip: meta.ip, userAgent: meta.userAgent }
+				);
 
-				return false;
+				return newAuthPayload;
 			},
 		},
 		getProfile: {
@@ -195,10 +252,20 @@ module.exports = {
 				method: "GET",
 				fullPath: "/getProfile",
 			},
-			async handler({ action, params, meta, ...ctx }) {
+			/**
+			 * Authorize the user from request
+			 *
+			 * @param {Context} ctx
+			 * @param {Object} params
+			 * @param {Object} meta
+			 * @returns
+			 */
+			async handler({ params, meta, ...ctx }) {
 				const { userInfo: user } = meta;
 
-				const results = await dbContext.models.User.findByPk(user.id);
+				const results = await this.dbContext.models.User.findByPk(
+					user.id
+				);
 
 				if (results) {
 					const refined = this.refinedUserObject(results.get());
@@ -245,7 +312,15 @@ module.exports = {
 					optional: true,
 				},
 			},
-			async handler({ action, params, meta, ...ctx }) {
+			/**
+			 * Authorize the user from request
+			 *
+			 * @param {Context} ctx
+			 * @param {Object} params
+			 * @param {Object} meta
+			 * @returns
+			 */
+			async handler({ params, meta, ...ctx }) {
 				const { userInfo: user } = meta;
 
 				const {
@@ -256,7 +331,9 @@ module.exports = {
 				} = params;
 
 				try {
-					const _user = await dbContext.models.User.findByPk(user.id);
+					const _user = await this.dbContext.models.User.findByPk(
+						user.id
+					);
 					if (!user || user.deleted) {
 						throw new MoleculerError(
 							AUTH_ERRORS.ACCESS_DENIED,
@@ -272,7 +349,7 @@ module.exports = {
 					if (new_password) {
 						// NOTE: CASE update password
 						// verify old password
-						const isValid = authHandler.verifyPassword(
+						const isValid = this.authHandler.verifyPassword(
 							old_password,
 							_user.password
 						);
@@ -304,7 +381,7 @@ module.exports = {
 						}
 
 						// new password is valid -> update password
-						const hashedPassword = authHandler.hashPassword(
+						const hashedPassword = this.authHandler.hashPassword(
 							re_new_password
 						);
 
@@ -350,20 +427,37 @@ module.exports = {
 			``;
 			return refined;
 		},
+		/**
+		 * Authorize the user from request
+		 *
+		 * @param {Context} ctx
+		 * @returns
+		 */
 		deflatMetadata(ctx) {
 			const newMetadata = unflatten(ctx.meta);
 			ctx.meta = _.omitBy(newMetadata, _.isNil);
 		},
 	},
-	// the global hook of this service
 	async started() {
+		// Auto-generate sequelize model
 		try {
+			// check if able to import init-function
 			require("./models/init-models");
 		} catch (e) {
+			// if un-able to import init function -> run auto-generate
 			if (e instanceof Error && e.code === "MODULE_NOT_FOUND") {
-				await generateModels(userDBOptions);
-				dbContext = new DatabaseContext();
+				try {
+					await generateModels(userDBOptions, this.logger);
+				} catch (error) {
+					this.logger.error(`Error on created service -> ${error}`);
+					this.broker.stop();
+				}
 			}
 		}
+		this.dbContext = new DatabaseContext(this.logger);
+		this.authHandler = new AuthenticationHandler(
+			this.dbContext,
+			this.logger
+		);
 	},
 };

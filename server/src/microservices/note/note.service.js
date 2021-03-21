@@ -5,7 +5,7 @@ const _ = require("lodash");
 
 const { CRUD_NOTE_ERRORS } = require("../../common/constants");
 
-const noteHandler = require("./handler");
+const DatabaseContext = require("./dbContext");
 
 /**
  * @typedef {import('moleculer').Context} Context Moleculer's Context
@@ -14,7 +14,7 @@ const noteHandler = require("./handler");
  */
 
 module.exports = {
-	name: "note",
+	name: process.env.SERVICE_NOTE_NAME,
 	version: process.env.SERVICE_NOTE_VERSION,
 	metadata: {
 		scalable: true,
@@ -35,16 +35,25 @@ module.exports = {
 					optional: true,
 				},
 				deleted: { type: "boolean", optional: true },
+				all: { type: "boolean", optional: true },
 			},
 			async handler({ action, params, meta, ...ctx }) {
 				try {
 					const { userInfo: user } = meta;
-					const { id, id_in, deleted } = params;
+					const { id, id_in, deleted, all } = params;
 
-					const result = await noteHandler.getManyNote({
-						id,
-						id_in,
-						deleted,
+					let query = { id, id_in };
+					if (typeof deleted === "boolean") {
+						query.deleted = deleted;
+					} else {
+						query.deleted = false;
+					}
+					if (typeof all === "boolean" && all === true) {
+						query = {};
+					}
+
+					const result = await this.dbContext.getManyNote({
+						...query,
 						createdBy: user.id,
 					});
 
@@ -69,7 +78,7 @@ module.exports = {
 					const { userInfo: user } = meta;
 					const { id } = params;
 
-					const result = await noteHandler.getOneNote({
+					const result = await this.dbContext.getOneNote({
 						id,
 						deleted: false,
 						createdBy: user.id,
@@ -126,7 +135,7 @@ module.exports = {
 					const { userInfo: user } = meta;
 					const { id, content, createdBy } = params;
 
-					let note = await noteHandler.getOneNote({
+					let note = await this.dbContext.getOneNote({
 						id,
 						deleted: false,
 						createdBy: user.id,
@@ -138,6 +147,7 @@ module.exports = {
 					}
 
 					note.content = content;
+					note.updatedAt = new Date();
 					if (createdBy) {
 						note.createdBy = createdBy;
 					}
@@ -166,7 +176,7 @@ module.exports = {
 					const { userInfo: user } = meta;
 					const { id, content, createdBy } = params;
 
-					let note = await noteHandler.getOneNote({
+					let note = await this.dbContext.getOneNote({
 						id,
 						deleted: false,
 						createdBy: user.id,
@@ -179,6 +189,7 @@ module.exports = {
 
 					note.content = content;
 					note.createdBy = createdBy;
+					note.updatedAt = new Date();
 
 					await note.save();
 
@@ -203,14 +214,16 @@ module.exports = {
 					const { userInfo: user } = meta;
 					const { id } = params;
 
-					let note = await noteHandler.getOneNote({ id });
+					let note = await this.dbContext.getOneNote({ id });
 					if (!note || !note.length) {
 						throw new Error("Không tìm thấy");
 					} else {
 						note = note.pop();
 					}
 
+					note.updatedAt = new Date();
 					note.deleted = true;
+
 					await note.save();
 
 					return note;
@@ -237,5 +250,8 @@ module.exports = {
 			const newMetadata = unflatten(ctx.meta);
 			ctx.meta = _.omitBy(newMetadata, _.isNil);
 		},
+	},
+	async started() {
+		this.dbContext = new DatabaseContext(this.logger);
 	},
 };

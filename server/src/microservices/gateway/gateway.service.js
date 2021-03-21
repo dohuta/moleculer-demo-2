@@ -3,17 +3,20 @@
 const ApiGateway = require("moleculer-web");
 const helmet = require("helmet");
 const flatten = require("flat");
+const requestIp = require("request-ip");
 
 const AUTH_ERRORS = require("../../common/constants").AUTH_ERRORS;
 const client = require("../note/mongoClient");
+
 /**
  * @typedef {import('moleculer').Context} Context Moleculer's Context
- * @typedef {import('http').IncomingMessage} IncomingRequest Incoming HTTP Request
+ * @typedef {import('http').IncomingMessage} IncomingMessage Incoming HTTP Request
+ * @typedef {import('http').ClientRequest} ClientRequest HTTP Server Response
  * @typedef {import('http').ServerResponse} ServerResponse HTTP Server Response
  */
 
 module.exports = {
-	name: "api",
+	name: "GATEWAY",
 	mixins: [ApiGateway],
 	settings: {
 		// Exposed port
@@ -30,18 +33,20 @@ module.exports = {
 		routes: [
 			{
 				path: "/api",
-				whitelist: [/(.*)signin/, /(.*)signup/],
+				whitelist: [/(.*)signin/, /(.*)signup/, /(.*)refresh/],
 				use: [helmet()],
 				mergeParams: true,
 				authentication: false,
-				autoAliases: true,
+				autoAliases: false,
 				aliases: {
 					health: "$node.health",
-					"POST /auth/signin": `${process.env.SERVICE_USER_VERSION}.user.signin`,
-					"POST /auth/signup": `${process.env.SERVICE_USER_VERSION}.user.signup`,
+					"POST /auth/signin": `${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.signin`,
+					"POST /auth/signup": `${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.signup`,
+					"POST /auth/refresh": `${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.refresh`,
 				},
 				onBeforeCall(ctx, route, req, res) {
 					// Set request headers to context meta
+					ctx.meta.ip = requestIp.getClientIp(req);
 					ctx.meta.userAgent = req.headers["user-agent"];
 				},
 				// onAfterCall(ctx, route, req, res, data) {
@@ -65,23 +70,24 @@ module.exports = {
 			{
 				path: "/api",
 				whitelist: [
-					`${process.env.SERVICE_USER_VERSION}.user.signout`,
-					`${process.env.SERVICE_USER_VERSION}.user.update`,
-					`${process.env.SERVICE_USER_VERSION}.user.getProfile`,
-					`${process.env.SERVICE_NOTE_VERSION}.note.*`,
+					`${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.signout`,
+					`${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.update`,
+					`${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.getProfile`,
+					`${process.env.SERVICE_NOTE_VERSION}.${process.env.SERVICE_NOTE_NAME}.*`,
 				],
 				use: [helmet()],
 				mergeParams: true,
 				authentication: true,
 				autoAliases: false,
 				aliases: {
-					"REST note": `${process.env.SERVICE_NOTE_VERSION}.note`,
-					"POST /auth/signout": `${process.env.SERVICE_USER_VERSION}.user.signout`,
-					"PUT /user/update": `${process.env.SERVICE_USER_VERSION}.user.update`,
-					"GET /user/getProfile": `${process.env.SERVICE_USER_VERSION}.user.getProfile`,
+					"REST note": `${process.env.SERVICE_NOTE_VERSION}.${process.env.SERVICE_NOTE_NAME}`,
+					"POST /auth/signout": `${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.signout`,
+					"PUT /user/update": `${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.update`,
+					"GET /user/getProfile": `${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.getProfile`,
 				},
 				onBeforeCall(ctx, route, req, res) {
 					// Set request headers to context meta
+					ctx.meta.ip = requestIp.getClientIp(req);
 					ctx.meta.userAgent = req.headers["user-agent"];
 				},
 				// onAfterCall(ctx, route, req, res, data) {
@@ -122,39 +128,68 @@ module.exports = {
 		 * @returns
 		 */
 		authenticate(ctx, route, req, res) {
-			let token;
+			let accessToken, rfToken;
+
 			if (req.headers.authorization) {
-				token = req.headers.authorization;
+				accessToken = req.headers.authorization;
+			}
+			if (
+				req.headers["x-refresh-token"] ||
+				req.headers["X-Refresh-Token"]
+			) {
+				rfToken =
+					req.headers["x-refresh-token"] ||
+					req.headers["X-Refresh-Token"];
 			}
 
-			if (!token) {
+			if (!accessToken || !rfToken) {
 				return Promise.reject(
-					new ApiGateway.Errors.UnAuthorizedError(
-						AUTH_ERRORS.ACCESS_DENIED
-					)
+					new ApiGateway.Errors.UnAuthorizedError("AUTH_FAILED")
 				);
 			}
 
 			// Verify JWT token
 			return ctx
-				.call(`${process.env.SERVICE_USER_VERSION}.user.verify`, {
-					token,
-				})
-				.then(({ user, accessToken }) => {
-					if (!user) {
+				.call(
+					`${process.env.SERVICE_USER_VERSION}.${process.env.SERVICE_USER_NAME}.verify`,
+					{
+						accessToken,
+						rfToken,
+					}
+				)
+				.then(({ id, fullname, username }) => {
+					if (!id && !username) {
+						this.logger.error("User not found");
 						return Promise.reject(
 							new ApiGateway.Errors.UnAuthorizedError(
-								AUTH_ERRORS.ACCESS_DENIED
+								"AUTH_FAILED"
 							)
 						);
 					} else {
-						const refined = flatten({ userInfo: { ...user } });
+						const refined = flatten({
+							userInfo: { id, fullname, username },
+						});
 						ctx.meta = {
 							...ctx.meta,
 							...refined,
-							accessToken,
+							// accessToken,
+							// rfToken,
+							// authUpdated,
 						};
+						// if (authUpdated) {
+						// 	res.setHeader("authorization", accessToken);
+						// 	res.setHeader("X-Refresh-Token", refreshToken);
+						// 	// res.setHeader("X-Auth-Updated", true);
+						// }
 					}
+				})
+				.catch((error) => {
+					this.logger.error(
+						`Authentication :: Error on authentication -> ${error}`
+					);
+					return Promise.reject(
+						new ApiGateway.Errors.UnAuthorizedError("AUTH_FAILED")
+					);
 				});
 		},
 	},

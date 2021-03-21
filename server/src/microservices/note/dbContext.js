@@ -1,10 +1,36 @@
 const _ = require("lodash");
 const ObjectId = require("mongoose").Types.ObjectId;
+const mongoose = require("mongoose");
 
 const NoteModel = require("./models/note.model");
 
-class NoteHandler {
-	constructor() {}
+const _USER_NAME = encodeURIComponent(process.env.SERVICE_NOTE_DB_USRNAME);
+const _PWD = encodeURIComponent(process.env.SERVICE_NOTE_DB_PWD);
+const _DBNAME = encodeURIComponent(process.env.SERVICE_NOTE_DB_NAME);
+const _HOST = `${process.env.SERVICE_NOTE_DB_HOST}:${process.env.SERVICE_NOTE_DB_PORT}`;
+
+// Connection URI
+const uri = `mongodb://${_USER_NAME}:${_PWD}@${_HOST}/${_DBNAME}`;
+
+class DatabaseContext {
+	constructor(logger) {
+		this.logger = logger || console;
+
+		try {
+			mongoose.Promise = global.Promise;
+			mongoose.connection.on(
+				"error",
+				logger.error.bind(console, "MongoDB connection error:")
+			);
+			mongoose.connect(uri, {
+				useNewUrlParser: true,
+				useUnifiedTopology: true,
+			});
+			this.logger.info(`🚀 DBContext :: initialized`);
+		} catch (error) {
+			throw error;
+		}
+	}
 
 	async getOneNote(options) {
 		if (!options || !Object.keys(options).length) {
@@ -47,4 +73,4 @@ class NoteHandler {
 	}
 }
 
-module.exports = new NoteHandler();
+module.exports = DatabaseContext;
