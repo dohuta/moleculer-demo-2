@@ -1,3 +1,12 @@
-\backend\ms_user_data\**\*
-\backend\ms_note_data\**\*
-\backend\ms_note_client\**\*
+]
+.DS_Store
+backend/ms_user_data/master.mdf
+backend/ms_user_data/mastlog.ldf
+backend/ms_user_data/model.mdf
+backend/ms_user_data/modellog.ldf
+backend/ms_user_data/msdbdata.mdf
+backend/ms_user_data/msdblog.ldf
+backend/ms_user_data/tempdb.mdf
+backend/ms_user_data/templog.ldf
+backend/ms_user_data/TodosDB_log.ldf
+backend/ms_user_data/TodosDB.mdf
