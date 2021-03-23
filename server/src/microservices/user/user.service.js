@@ -175,14 +175,14 @@ module.exports = {
 					});
 
 					// hide sensitive information
-					const refined = this.refinedUserObject(created);
+					const refined = this.refinedUserObject(created.get());
 					// generate access token
-					const accessToken = this.authHandler.generateToken(
+					const authPayload = await this.authHandler.generateToken(
 						refined,
 						{ ip, userAgent }
 					);
 					// compose payload and response to client
-					return { ...refined, accessToken };
+					return { ...refined, ...authPayload };
 				} else {
 					// NOTE: CASE 2.2: username is available but password is invalid, or other cases
 					this.logger.error(
