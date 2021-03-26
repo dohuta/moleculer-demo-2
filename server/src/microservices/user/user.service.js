@@ -225,28 +225,6 @@ module.exports = {
 				return authPayload;
 			},
 		},
-		refresh: {
-			rest: {
-				method: "POST",
-				fullPath: "/refresh",
-			},
-			/**
-			 * Authorize the user from request
-			 *
-			 * @param {Context} ctx
-			 * @param {Object} params
-			 * @param {Object} meta
-			 * @returns
-			 */
-			async handler({ params, meta, ...ctx }) {
-				const newAuthPayload = this.authHandler.refreshAuth(
-					ctx.options.parentCtx.params.req,
-					{ ip: meta.ip, userAgent: meta.userAgent }
-				);
-
-				return newAuthPayload;
-			},
-		},
 		getProfile: {
 			rest: {
 				method: "GET",
